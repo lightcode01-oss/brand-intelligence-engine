@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+.venv/
+venv/
+postgres_data/
+redis_data/
+pnpm-lock.yaml
+package-lock.json
+*.pdf
+*.zip
+*.png
+*.ico

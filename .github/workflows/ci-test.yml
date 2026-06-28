@@ -1,0 +1,55 @@
+name: Unit and Integration Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Frontend tests setup
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install Node Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Web Testing (Vitest Placeholder)
+        run: |
+          if pnpm --filter web run test --help &> /dev/null; then
+            pnpm --filter web test
+          else
+            echo "No test script found in web"
+          fi
+
+      # Backend tests setup
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python Dependencies
+        run: |
+          pip install -r apps/api/requirements.txt || echo "No requirements file yet"
+          pip install pytest
+
+      - name: Run Backend Testing (Pytest Placeholder)
+        run: |
+          if [ -d "apps/api/tests" ]; then
+            pytest apps/api/tests/
+          else
+            echo "No api tests folder found"
+          fi

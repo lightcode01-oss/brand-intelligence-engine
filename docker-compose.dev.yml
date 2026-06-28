@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: ./docker/web/Dockerfile.dev
+    container_name: nomen_web_dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/workspace
+      - /workspace/node_modules
+      - /workspace/apps/web/node_modules
+      - /workspace/apps/web/.next
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    networks:
+      - dev-net
+
+  api:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile.dev
+    container_name: nomen_api_dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/api:/app
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://nomen_user:${DB_PASSWORD}@postgres:5432/nomen_db
+      - REDIS_URL=redis://redis:6379/0
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - dev-net
+
+  postgres:
+    image: ankane/pgvector:v0.5.1
+    container_name: nomen_postgres_dev
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=nomen_user
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=nomen_db
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    networks:
+      - dev-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nomen_user -d nomen_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nomen_redis_dev
+    ports:
+      - "6379:6379"
+    networks:
+      - dev-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata_dev:
+
+networks:
+  dev-net:
+    driver: bridge

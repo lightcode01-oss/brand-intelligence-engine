@@ -1,0 +1,20 @@
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (import organization)
+    "N",   # pep8-naming
+    "UP",  # pyupgrade (modern python updates)
+    "B",   # flake8-bugbear (prevent logical bugs)
+    "C4",  # flake8-comprehensions
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["app"]

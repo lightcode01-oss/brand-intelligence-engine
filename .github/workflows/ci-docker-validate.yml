@@ -1,0 +1,39 @@
+name: Docker Build Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  validate-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: actions/setup-buildx-action@v3
+
+      # 1. Validate Docker Compose config file syntax
+      - name: Validate Docker Compose Configuration
+        run: |
+          docker compose -f docker-compose.yml config
+          docker compose -f docker-compose.dev.yml config
+
+      # 2. Dry-Run Build Web
+      - name: Dry-Run Build Web Dockerfile
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/web/Dockerfile
+          push: false
+
+      # 3. Dry-Run Build API
+      - name: Dry-Run Build API Dockerfile
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/api/Dockerfile
+          push: false

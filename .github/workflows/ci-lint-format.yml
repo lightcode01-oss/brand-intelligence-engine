@@ -1,0 +1,48 @@
+name: Lint and Format Audit
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint-and-format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Set up node environments
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install Node Dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Set up python environment
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      # Audits
+      - name: Verify Web Code Style (Prettier & ESLint)
+        run: |
+          pnpm run format:check
+          pnpm run lint
+
+      - name: Run Ruff Linter & Format Checks
+        run: |
+          ruff check apps/api
+          ruff format --check apps/api

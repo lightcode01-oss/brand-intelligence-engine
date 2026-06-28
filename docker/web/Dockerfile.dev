@@ -1,0 +1,14 @@
+FROM node:20-alpine
+WORKDIR /workspace
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY apps/web/package.json ./apps/web/
+COPY packages/ts-config/tsconfig.base.json ./packages/ts-config/
+
+RUN pnpm install
+
+EXPOSE 3000
+CMD ["pnpm", "--filter", "web", "dev"]

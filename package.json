@@ -1,0 +1,18 @@
+{
+  "name": "nomen-monorepo",
+  "version": "0.1.0-foundation",
+  "private": true,
+  "scripts": {
+    "prepare": "husky",
+    "lint": "pnpm --filter web lint && ruff check apps/api",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\" && ruff format apps/api",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,yml,yaml}\" && ruff format --check apps/api"
+  },
+  "devDependencies": {
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.7",
+    "prettier": "^3.3.2",
+    "@commitlint/cli": "^19.3.0",
+    "@commitlint/config-conventional": "^19.2.2"
+  }
+}
