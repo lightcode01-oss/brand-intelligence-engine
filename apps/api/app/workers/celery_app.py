@@ -5,7 +5,10 @@ except ImportError:
     # Minimal mock class for testing / execution in environments without celery installed
     class Celery:
         def __init__(self, *args, **kwargs):
-            pass
+            class DummyConf:
+                def update(self, *args, **kwargs):
+                    pass
+            self.conf = DummyConf()
         def task(self, *args, **kwargs):
             return lambda fn: fn
 
