@@ -78,7 +78,8 @@ class BrandPipelineOrchestrator:
                 industry=industry,
                 context=context,
                 target_count=target_count * 5,
-                temperature=temperature
+                temperature=temperature,
+                workspace_id=workspace_id
             )
             stages_metrics["stage_01_generate_ms"] = int((time.perf_counter() - s1_start) * 1000)
             
@@ -133,7 +134,31 @@ class BrandPipelineOrchestrator:
             meta["stages_latencies_ms"] = stages_metrics
             
             # Finish Job
-            await self._update_job_stage(db, job_id, workspace_id, "Finished", status="SUCCESS")
+            if db and job_id:
+                from sqlalchemy import update
+                from app.models.brand import GenerationJob
+                stmt = update(GenerationJob).where(GenerationJob.id == job_id).values(
+                    status="SUCCESS",
+                    current_stage="Finished",
+                    latency_ms=meta.get("latency_ms", 0),
+                    token_usage=meta.get("token_usage", {"prompt_tokens": 0, "completion_tokens": 0}),
+                    cost_estimate=meta.get("cost_estimate", 0.0)
+                )
+                await db.execute(stmt)
+                await db.commit()
+
+            if workspace_id and job_id:
+                from app.services.collaboration.websocket import manager
+                await manager.broadcast_to_workspace(
+                    workspace_id=workspace_id,
+                    event="job_progress",
+                    data={
+                        "job_id": str(job_id),
+                        "status": "SUCCESS",
+                        "stage": "Finished",
+                        "error_message": None
+                    }
+                )
             
             return final_candidates, meta
             

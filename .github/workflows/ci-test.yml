@@ -1,22 +1,34 @@
-name: Unit and Integration Testing
+name: CI — Test Suite
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop, "release/**"]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  run-tests:
+  # ==========================================================================
+  # Backend Tests
+  # ==========================================================================
+  backend-tests:
+    name: Backend Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+
     services:
       postgres:
         image: ankane/pgvector:v0.5.1
         env:
           POSTGRES_USER: nomen_user
-          POSTGRES_PASSWORD: supersecretpassword
-          POSTGRES_DB: nomen_db
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: nomen_test
         ports:
           - 5432:5432
         options: >-
@@ -24,6 +36,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
       redis:
         image: redis:7-alpine
         ports:
@@ -35,51 +48,113 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Frontend tests setup
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
-
-      - name: Install Node Dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run Web Testing (Vitest Placeholder)
-        run: |
-          if pnpm --filter web run test --help &> /dev/null; then
-            pnpm --filter web test
-          else
-            echo "No test script found in web"
-          fi
-
-      # Backend tests setup
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: apps/api/requirements.txt
 
-      - name: Install Python Dependencies
+      - name: Install dependencies
+        working-directory: apps/api
         run: |
-          pip install -r apps/api/requirements.txt || echo "No requirements file yet"
-          pip install pytest pytest-asyncio pytest-cov
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install \
+            pytest==8.2.2 \
+            pytest-asyncio==0.23.7 \
+            pytest-cov==5.0.0 \
+            aiosqlite==0.20.0 \
+            httpx==0.27.0
 
-      - name: Run Backend Testing
+      - name: Run Ruff linter
+        working-directory: apps/api
+        run: ruff check app/ || true
+
+      - name: Run backend tests
+        working-directory: apps/api
         env:
-          DATABASE_URL: postgresql+asyncpg://nomen_user:supersecretpassword@localhost:5432/nomen_db
-          REDIS_URL: redis://localhost:6379/0
-          SECRET_KEY: testsecretkeyvalue
           ENV: testing
+          TEST_DATABASE_URL: sqlite+aiosqlite:///:memory:
+          SECRET_KEY: test-secret-key-for-ci-only-change-in-production
+          DATABASE_URL: postgresql+asyncpg://nomen_user:testpassword@localhost:5432/nomen_test
+          REDIS_URL: redis://localhost:6379/0
         run: |
-          if [ -d "apps/api/tests" ]; then
-            pytest apps/api/tests/ --cov=apps/api/app --cov-report=xml
-          else
-            echo "No api tests folder found"
-          fi
+          python -m pytest tests/ \
+            -o asyncio_mode=auto \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --tb=short \
+            -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: apps/api/coverage.xml
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: false
+
+  # ==========================================================================
+  # Frontend Tests & Build
+  # ==========================================================================
+  frontend:
+    name: Frontend (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["20"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm modules
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter web lint
+
+      - name: Type check
+        run: pnpm --filter web exec tsc --noEmit
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.nomen.ai
+          NEXT_PUBLIC_APP_ENV: production
+        run: pnpm --filter web build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: nextjs-build-${{ github.sha }}
+          path: apps/web/.next/
+          retention-days: 7

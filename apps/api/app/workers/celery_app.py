@@ -1,13 +1,12 @@
 import os
+
 try:
     from celery import Celery
 except ImportError:
-    # Minimal mock class for testing / execution in environments without celery installed
     class Celery:
         def __init__(self, *args, **kwargs):
             class DummyConf:
-                def update(self, *args, **kwargs):
-                    pass
+                def update(self, *args, **kwargs): pass
             self.conf = DummyConf()
         def task(self, *args, **kwargs):
             return lambda fn: fn
@@ -19,11 +18,37 @@ celery_app = Celery(
     backend=redis_url
 )
 
-# Configuration overrides
+# Configuration overrides with task priority routing & dead-letter queue (DLQ)
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
     timezone="UTC",
-    enable_utc=True
+    enable_utc=True,
+    
+    # Priority Queues & Dead-Letter Queue Routing
+    task_default_queue="default",
+    task_queues={
+        "high_priority": {
+            "binding_key": "high_priority",
+        },
+        "default": {
+            "binding_key": "default",
+        },
+        "low_priority": {
+            "binding_key": "low_priority",
+        },
+        "dead_letter": {
+            "binding_key": "dead_letter",
+        }
+    },
+    task_routes={
+        "app.workers.generation.*": {"queue": "high_priority"},
+        "app.workers.validation.*": {"queue": "high_priority"},
+        "app.workers.notifications.*": {"queue": "low_priority"},
+        "app.workers.export.*": {"queue": "default"},
+    },
+    # Ensure failed tasks are retried or sent to DLQ
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
 )

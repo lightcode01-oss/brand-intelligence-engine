@@ -1,40 +1,147 @@
-name: Security Scans
+name: CI — Security Scanning
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main]
+  schedule:
+    # Run every Monday at 9am UTC
+    - cron: "0 9 * * 1"
 
 jobs:
-  security-audit:
+  # ==========================================================================
+  # Python security audit (Bandit + Safety)
+  # ==========================================================================
+  python-security:
+    name: Python Security Audit
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # Python Security Scan (Bandit)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
-      - name: Install Bandit
-        run: pip install bandit
+      - name: Install security tools
+        run: pip install bandit[toml] safety pip-audit
 
-      - name: Run Bandit Security Audit
-        run: bandit -r apps/api/ -ll || echo "Fix minor warnings"
+      - name: Run Bandit (SAST)
+        run: |
+          bandit -r apps/api/app/ \
+            -ll \
+            -f json \
+            -o bandit-report.json \
+            --exclude apps/api/app/tests || true
+          bandit -r apps/api/app/ -ll --exclude apps/api/app/tests
 
-      # Node Dependency Security Scan
+      - name: Run pip-audit (dependency CVEs)
+        working-directory: apps/api
+        run: |
+          pip install -r requirements.txt
+          pip-audit --format=json --output=pip-audit-report.json || true
+          pip-audit
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: python-security-reports
+          path: |
+            bandit-report.json
+            apps/api/pip-audit-report.json
+          retention-days: 30
+
+  # ==========================================================================
+  # Node.js dependency audit
+  # ==========================================================================
+  node-security:
+    name: Node.js Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Audit Node Dependencies
-        run: pnpm audit --audit-level=high || echo "High vulnerabilities must be reviewed manually"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit Node dependencies
+        run: pnpm audit --audit-level=high || true
+
+  # ==========================================================================
+  # Trivy — Container image vulnerability scanning
+  # ==========================================================================
+  trivy-api:
+    name: Trivy — API Image Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build API image for scanning
+        run: |
+          docker build \
+            -f docker/api/Dockerfile \
+            -t nomen-api:scan \
+            .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "nomen-api:scan"
+          format: "sarif"
+          output: "trivy-api.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: "0"
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-api.sarif"
+          category: "trivy-api"
+
+  # ==========================================================================
+  # CodeQL — Static analysis
+  # ==========================================================================
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        language: ["python", "javascript"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

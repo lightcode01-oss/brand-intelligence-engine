@@ -1,86 +1,153 @@
-version: '3.8'
+# =============================================================================
+# Nomen — Production Docker Compose
+# Stack: Nginx · Next.js · FastAPI · PostgreSQL · Redis · Celery · Prometheus
+#        Grafana · Loki · AlertManager · Flower
+# =============================================================================
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
+    tag: "{{.Name}}"
+
+x-api-env: &api-env
+  DATABASE_URL: postgresql+asyncpg://nomen_user:${DB_PASSWORD}@postgres:5432/nomen_db
+  REDIS_URL: redis://redis:6379/0
+  SECRET_KEY: ${SECRET_KEY}
+  GEMINI_API_KEY: ${GEMINI_API_KEY}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ENV: production
+  ALLOWED_HOSTS: "${ALLOWED_HOSTS:-nomen.ai,www.nomen.ai}"
+  CORS_ORIGINS: "${CORS_ORIGINS:-https://nomen.ai}"
 
 services:
-  traefik:
-    image: traefik:v2.10
-    container_name: traefik
-    command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      - "--certificatesresolvers.letsencrypt.acme.email=admin@nomen.ai"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+
+  # ---- Nginx reverse proxy ----
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nomen_nginx
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./letsencrypt:/letsencrypt"
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks:
+      - internal-net
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+  # ---- Certbot (SSL certificate renewal) ----
+  certbot:
+    image: certbot/certbot:latest
+    container_name: nomen_certbot
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
     networks:
       - internal-net
 
+  # ---- Next.js web frontend ----
   web:
     build:
       context: .
       dockerfile: ./docker/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://nomen.ai/api/v1}
+        NEXT_PUBLIC_APP_ENV: production
+    image: nomen-web:${TAG:-latest}
     container_name: nomen_web
+    restart: unless-stopped
     environment:
-      - NEXT_PUBLIC_API_URL=https://nomen.ai/api/v1
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.web.rule=Host(`nomen.ai`)"
-      - "traefik.http.routers.web.entrypoints=websecure"
-      - "traefik.http.routers.web.tls.certresolver=letsencrypt"
+      NODE_ENV: production
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://nomen.ai}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-}
     networks:
       - internal-net
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "node", "-e", "require('http').get({hostname:'localhost',port:3000,path:'/',timeout:5000},(r)=>{r.statusCode<500?process.exit(0):process.exit(1)}).on('error',()=>process.exit(1))"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
+      start_period: 30s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 256M
+    logging: *default-logging
 
+  # ---- FastAPI backend ----
   api:
     build:
       context: .
       dockerfile: ./docker/api/Dockerfile
+    image: nomen-api:${TAG:-latest}
     container_name: nomen_api
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    command: ["gunicorn", "app.main:app",
+      "--worker-class", "uvicorn.workers.UvicornWorker",
+      "--workers", "2",
+      "--bind", "0.0.0.0:8000",
+      "--timeout", "120",
+      "--graceful-timeout", "30",
+      "--access-logfile", "-",
+      "--error-logfile", "-"]
     environment:
-      - DATABASE_URL=postgresql+asyncpg://nomen_user:${DB_PASSWORD}@postgres:5432/nomen_db
-      - REDIS_URL=redis://redis:6379/0
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      <<: *api-env
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=Host(`nomen.ai`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.api.entrypoints=websecure"
-      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
     networks:
       - internal-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
+      start_period: 20s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          memory: 512M
+    logging: *default-logging
 
+  # ---- PostgreSQL (pgvector) ----
   postgres:
     image: ankane/pgvector:v0.5.1
     container_name: nomen_postgres
+    restart: unless-stopped
     environment:
-      - POSTGRES_USER=nomen_user
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=nomen_db
+      POSTGRES_USER: nomen_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: nomen_db
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./database/postgres/init:/docker-entrypoint-initdb.d:ro
     networks:
       - internal-net
     healthcheck:
@@ -88,10 +155,36 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          memory: 512M
+    logging: *default-logging
 
+  # ---- PostgreSQL exporter (for Prometheus) ----
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: nomen_postgres_exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://nomen_user:${DB_PASSWORD}@postgres:5432/nomen_db?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal-net
+    logging: *default-logging
+
+  # ---- Redis cache ----
   redis:
     image: redis:7-alpine
     container_name: nomen_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 512mb --maxmemory-policy allkeys-lru
     volumes:
       - redisdata:/data
     networks:
@@ -101,42 +194,257 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          memory: 128M
+    logging: *default-logging
 
+  # ---- Redis exporter (for Prometheus) ----
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: nomen_redis_exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal-net
+    logging: *default-logging
+
+  # ---- Celery Fast Queue Worker ----
   worker_fast:
     build:
       context: .
       dockerfile: ./docker/api/Dockerfile
+    image: nomen-api:${TAG:-latest}
     container_name: nomen_worker_fast
-    command: celery -A app.core.cel_app worker -Q fast-queue --loglevel=info
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.cel_app", "worker",
+      "-Q", "fast-queue",
+      "--loglevel=info",
+      "--concurrency=4",
+      "--max-tasks-per-child=100"]
     environment:
-      - DATABASE_URL=postgresql+asyncpg://nomen_user:${DB_PASSWORD}@postgres:5432/nomen_db
-      - REDIS_URL=redis://redis:6379/0
+      <<: *api-env
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks:
       - internal-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging: *default-logging
 
+  # ---- Celery Heavy Queue Worker ----
   worker_heavy:
     build:
       context: .
       dockerfile: ./docker/api/Dockerfile
+    image: nomen-api:${TAG:-latest}
     container_name: nomen_worker_heavy
-    command: celery -A app.core.cel_app worker -Q heavy-queue --loglevel=info -c 2
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.cel_app", "worker",
+      "-Q", "heavy-queue",
+      "--loglevel=info",
+      "--concurrency=2",
+      "--max-tasks-per-child=50"]
     environment:
-      - DATABASE_URL=postgresql+asyncpg://nomen_user:${DB_PASSWORD}@postgres:5432/nomen_db
-      - REDIS_URL=redis://redis:6379/0
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      <<: *api-env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal-net
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+    logging: *default-logging
+
+  # ---- Celery Beat Scheduler ----
+  celery_beat:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    image: nomen-api:${TAG:-latest}
+    container_name: nomen_celery_beat
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.cel_app", "beat",
+      "--loglevel=info",
+      "--schedule=/tmp/celerybeat-schedule"]
+    environment:
+      <<: *api-env
     depends_on:
       redis:
         condition: service_healthy
     networks:
       - internal-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+    logging: *default-logging
+
+  # ---- Celery Flower monitoring ----
+  flower:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    image: nomen-api:${TAG:-latest}
+    container_name: nomen_flower
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.cel_app", "flower",
+      "--port=5555",
+      "--basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-flowerpass}"]
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "5555:5555"
+    networks:
+      - internal-net
+    logging: *default-logging
+
+  # ---- Prometheus metrics ----
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: nomen_prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--storage.tsdb.retention.size=10GB"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    volumes:
+      - ./docker/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/monitoring/prometheus/alerts:/etc/prometheus/alerts:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - internal-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+  # ---- Grafana dashboards ----
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: nomen_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-grafanapass}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_URL:-http://localhost:3001}
+      GF_INSTALL_PLUGINS: "grafana-piechart-panel,grafana-worldmap-panel"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - internal-net
+    logging: *default-logging
+
+  # ---- Loki log aggregation ----
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: nomen_loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./docker/monitoring/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - internal-net
+    logging: *default-logging
+
+  # ---- AlertManager ----
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: nomen_alertmanager
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./docker/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - internal-net
+    logging: *default-logging
+
+  # ---- Node exporter (host metrics) ----
+  node-exporter:
+    image: prom/node-exporter:v1.8.1
+    container_name: nomen_node_exporter
+    restart: unless-stopped
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - internal-net
+    logging: *default-logging
 
 volumes:
   pgdata:
+    driver: local
   redisdata:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  loki_data:
+    driver: local
+  alertmanager_data:
+    driver: local
+  nginx_logs:
+    driver: local
+  certbot_www:
+    driver: local
+  certbot_conf:
+    driver: local
 
 networks:
   internal-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

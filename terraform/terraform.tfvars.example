@@ -1,0 +1,29 @@
+# =============================================================================
+# Nomen — Terraform tfvars example
+# Copy to terraform.tfvars and fill in actual values
+# DO NOT commit terraform.tfvars to git
+# =============================================================================
+
+environment          = "production"
+aws_region           = "us-east-1"
+aws_profile          = "nomen-prod"
+project              = "nomen"
+
+vpc_cidr             = "10.0.0.0/16"
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.10.0/24", "10.0.11.0/24"]
+
+db_instance_class    = "db.t3.medium"
+db_allocated_storage = 100
+
+redis_node_type      = "cache.t3.micro"
+
+api_image            = "ghcr.io/your-org/nomen-api:v1.0.0"
+web_image            = "ghcr.io/your-org/nomen-web:v1.0.0"
+
+domain_name          = "nomen.ai"
+
+tags = {
+  CostCenter = "engineering"
+  Owner      = "platform-team"
+}

@@ -1,8 +1,17 @@
-apiVersion: autoscaling/v1
+---
+# =============================================================================
+# Nomen — Horizontal Pod Autoscaler (HPA)
+# Scales API and Web deployments based on CPU/memory utilization
+# =============================================================================
+
+# API HPA
+apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: nomen-api-hpa
-  namespace: default
+  namespace: nomen
+  labels:
+    app.kubernetes.io/name: nomen-api
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -10,13 +19,42 @@ spec:
     name: nomen-api
   minReplicas: 2
   maxReplicas: 10
-  targetCPUUtilizationPercentage: 75
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+
 ---
-apiVersion: autoscaling/v1
+# Web HPA
+apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: nomen-web-hpa
-  namespace: default
+  namespace: nomen
+  labels:
+    app.kubernetes.io/name: nomen-web
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -24,4 +62,23 @@ spec:
     name: nomen-web
   minReplicas: 2
   maxReplicas: 8
-  targetCPUUtilizationPercentage: 80
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120

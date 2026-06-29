@@ -1,0 +1,162 @@
+# =============================================================================
+# Nomen — Prometheus Alert Rules
+# =============================================================================
+
+groups:
+  # ---- API Availability ----
+  - name: api_availability
+    interval: 30s
+    rules:
+      - alert: APIDown
+        expr: up{job="nomen-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Nomen API is DOWN"
+          description: "The Nomen API service has been unreachable for more than 1 minute."
+          runbook: "https://docs.nomen.ai/runbooks/api-down"
+
+      - alert: HighAPIErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="nomen-api",status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{job="nomen-api"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High API error rate: {{ $value | humanizePercentage }}"
+          description: "API 5xx error rate exceeds 5% over the last 5 minutes."
+
+      - alert: HighAPILatency
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job="nomen-api"}[5m])) by (le)) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High API p99 latency: {{ $value }}s"
+          description: "API p99 latency exceeds 2 seconds over the last 5 minutes."
+
+  # ---- Database ----
+  - name: database_health
+    rules:
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "PostgreSQL is DOWN"
+          description: "PostgreSQL exporter cannot reach the database."
+
+      - alert: PostgreSQLTooManyConnections
+        expr: |
+          pg_stat_activity_count / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "PostgreSQL connections at {{ $value | humanizePercentage }}"
+          description: "More than 80% of PostgreSQL connections are in use."
+
+      - alert: PostgreSQLLowDiskSpace
+        expr: |
+          pg_database_size_bytes / (1024*1024*1024) > 50
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "PostgreSQL database size: {{ $value }}GB"
+          description: "Database size exceeds 50GB — consider scaling storage."
+
+  # ---- Redis ----
+  - name: redis_health
+    rules:
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Redis is DOWN"
+          description: "Redis exporter cannot reach the cache service."
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis memory usage: {{ $value | humanizePercentage }}"
+          description: "Redis memory usage exceeds 85% of the configured max."
+
+  # ---- Host / Infrastructure ----
+  - name: host_health
+    rules:
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Host CPU at {{ $value }}%"
+          description: "Host CPU usage exceeds 85% for 10 minutes."
+
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Host memory at {{ $value }}%"
+          description: "Host memory usage exceeds 90%."
+
+      - alert: DiskSpaceLow
+        expr: |
+          (1 - (node_filesystem_free_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} at {{ $value }}%"
+          description: "Disk usage exceeds 80% on {{ $labels.mountpoint }}."
+
+  # ---- AI Provider ----
+  - name: ai_provider_health
+    rules:
+      - alert: AIProviderHighLatency
+        expr: |
+          histogram_quantile(0.95, rate(ai_request_duration_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: ai
+        annotations:
+          summary: "AI provider p95 latency: {{ $value }}s"
+          description: "AI provider response latency exceeds 10s at p95."
+
+      - alert: AIProviderHighCost
+        expr: |
+          sum(rate(ai_cost_total[1h])) * 3600 > 50
+        for: 1h
+        labels:
+          severity: warning
+          team: finance
+        annotations:
+          summary: "AI cost rate: ${{ $value }}/hour"
+          description: "AI spending rate exceeds $50/hour."

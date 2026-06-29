@@ -27,6 +27,8 @@ class HealthResponseData(BaseModel):
 class ReadyResponseData(BaseModel):
     status: str = Field("ready", description="Status indicator.")
     database_connected: bool = Field(..., description="Connection status to the main database.")
+    broker_connected: Optional[bool] = Field(None, description="Connection status to the message broker.")
+    celery_connected: Optional[bool] = Field(None, description="Celery worker presence status.")
 
 class LiveResponseData(BaseModel):
     status: str = Field("live", description="Liveness check indicator.")

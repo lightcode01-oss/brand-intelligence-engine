@@ -49,6 +49,7 @@ class RedisRateLimiterMiddleware(BaseHTTPMiddleware):
         now = time.time()
         clear_before = now - self.window
         
+        current_requests = 1
         try:
             # Pipeline atomic transactions
             pipe = redis_client.pipeline()
@@ -60,7 +61,7 @@ class RedisRateLimiterMiddleware(BaseHTTPMiddleware):
             
             if current_requests > self.limit:
                 # Return standard API Envelope error
-                return JSONResponse(
+                response = JSONResponse(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     content={
                         "status": "error",
@@ -69,8 +70,16 @@ class RedisRateLimiterMiddleware(BaseHTTPMiddleware):
                         "errors": [f"Maximum requests limit of {self.limit} per {self.window}s exceeded."]
                     }
                 )
+                response.headers["X-RateLimit-Limit"] = str(self.limit)
+                response.headers["X-RateLimit-Remaining"] = "0"
+                response.headers["X-RateLimit-Reset"] = str(int(now + self.window))
+                return response
         except Exception:
             # Fallback bypass on transient Redis connection exceptions
             pass
             
-        return await call_next(request)
+        response = await call_next(request)
+        response.headers["X-RateLimit-Limit"] = str(self.limit)
+        response.headers["X-RateLimit-Remaining"] = str(max(0, self.limit - current_requests))
+        response.headers["X-RateLimit-Reset"] = str(int(now + self.window))
+        return response

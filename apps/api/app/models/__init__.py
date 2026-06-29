@@ -39,11 +39,14 @@ from app.models.security import (
     DataDeletionRequest,
     ConsentRecord,
 )
+from app.models.integration import WorkspaceIntegration, WorkspaceWebhook
 
 __all__ = [
     "Base",
     "StandardBase",
     "ImmutableBase",
+    "WorkspaceIntegration",
+    "WorkspaceWebhook",
     "User",
     "Subscription",
     "AuditLog",

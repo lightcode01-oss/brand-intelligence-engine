@@ -1,0 +1,12 @@
+---
+# =============================================================================
+# Nomen — Kubernetes Namespace
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nomen
+  labels:
+    app.kubernetes.io/name: nomen
+    app.kubernetes.io/managed-by: kubectl
+    environment: production

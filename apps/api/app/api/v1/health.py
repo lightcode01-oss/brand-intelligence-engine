@@ -23,17 +23,44 @@ async def get_health(request: Request) -> StandardResponse[HealthResponseData]:
 
 @router.get("/ready", response_model=StandardResponse[ReadyResponseData])
 async def get_ready(request: Request, db: AsyncSession = Depends(get_db_session)) -> StandardResponse[ReadyResponseData]:
-    """Checks if the service and database connection are fully initialized."""
+    """Checks if the service, database, and broker connection are fully initialized."""
     db_connected = False
     try:
-        # Run a fast ping statement
         await db.execute(text("SELECT 1"))
         db_connected = True
     except Exception:
         pass
         
-    data = ReadyResponseData(status="ready" if db_connected else "not_ready", database_connected=db_connected)
-    message = "Service is ready to handle traffic." if db_connected else "Service database connection is down."
+    broker_connected = False
+    celery_connected = False
+    try:
+        import redis
+        import os
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        client = redis.from_url(redis_url, socket_timeout=0.5)
+        client.ping()
+        broker_connected = True
+    except Exception:
+        pass
+        
+    try:
+        from app.workers.celery_app import celery_app
+        if hasattr(celery_app, "control"):
+            insp = celery_app.control.inspect(timeout=0.1)
+            celery_connected = True
+        else:
+            celery_connected = broker_connected
+    except Exception:
+        pass
+        
+    all_ready = db_connected and broker_connected
+    data = ReadyResponseData(
+        status="ready" if all_ready else "not_ready",
+        database_connected=db_connected,
+        broker_connected=broker_connected,
+        celery_connected=celery_connected
+    )
+    message = "Service is ready to handle traffic." if all_ready else "Service database/broker connection is down."
     return wrap_success_response(data, request, message)
 
 @router.get("/live", response_model=StandardResponse[LiveResponseData])
