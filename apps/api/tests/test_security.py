@@ -70,7 +70,11 @@ async def test_account_lockout_workflow(db_session: AsyncSession) -> None:
     await db_session.refresh(user)
     assert user.failed_login_count == 5
     assert user.locked_until is not None
-    assert user.locked_until > datetime.now(timezone.utc)
+    locked_until = user.locked_until
+    now = datetime.now(timezone.utc)
+    if locked_until.tzinfo is None:
+        now = now.replace(tzinfo=None)
+    assert locked_until > now
     
     # Attempting to login in locked state fails
     with pytest.raises(AuthenticationError) as exc_info:

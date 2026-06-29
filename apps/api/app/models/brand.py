@@ -132,6 +132,7 @@ class GenerationJob(StandardBase):
         nullable=False
     )
     status: Mapped[str] = mapped_column(job_status_enum, default="PENDING", nullable=False)
+    current_stage: Mapped[Optional[str]] = mapped_column(String(50), default="Queued", nullable=True)
     model_name: Mapped[str] = mapped_column(String(50), nullable=False)
     engine_version: Mapped[str] = mapped_column(String(50), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(50), nullable=False)

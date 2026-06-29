@@ -61,9 +61,12 @@ class AuthenticationService:
             
         # 1. Lockout verification check
         now = datetime.now(timezone.utc)
-        if user.locked_until and user.locked_until > now:
-            minutes_left = int((user.locked_until - now).total_seconds() / 60) + 1
-            raise AuthenticationError(f"Account locked due to consecutive failures. Please wait {minutes_left} minutes.")
+        if user.locked_until:
+            locked_until = user.locked_until
+            comp_now = now if locked_until.tzinfo is not None else now.replace(tzinfo=None)
+            if locked_until > comp_now:
+                minutes_left = int((locked_until - comp_now).total_seconds() / 60) + 1
+                raise AuthenticationError(f"Account locked due to consecutive failures. Please wait {minutes_left} minutes.")
             
         # 2. Verify password credentials
         if not verify_password(password_raw, user.password_hash):

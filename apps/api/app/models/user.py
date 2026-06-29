@@ -144,8 +144,11 @@ class Notification(StandardBase):
     
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     type: Mapped[str] = mapped_column(notification_type_enum, default="IN_APP", nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String(50), default="project_update", nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(String(1000), nullable=False)
+    data_json: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, nullable=True)
+    sender_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 class Coupon(StandardBase):
@@ -211,11 +214,13 @@ class AuditLog(ImmutableBase):
     
     actor: Mapped[str] = mapped_column(String(255), nullable=False)
     workspace_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True)
+    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
     entity_name: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     action: Mapped[str] = mapped_column(String(255), nullable=False)
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
     user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    request_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
 class FeatureFlag(StandardBase):
     __tablename__ = "feature_flags"

@@ -113,6 +113,7 @@ class GenerationJobResponse(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
     status: str
+    current_stage: Optional[str] = None
     model_name: str
     engine_version: str
     prompt_version: str

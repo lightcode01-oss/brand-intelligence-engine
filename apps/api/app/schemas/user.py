@@ -68,3 +68,19 @@ class FeatureFlagResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class NotificationResponse(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    type: str
+    category: Optional[str]
+    title: str
+    message: str
+    data_json: Optional[dict]
+    sender_id: Optional[uuid.UUID]
+    read_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

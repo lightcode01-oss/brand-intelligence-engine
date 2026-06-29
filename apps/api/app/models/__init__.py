@@ -17,6 +17,16 @@ from app.models.brand import (
     Export,
     GenerationJob
 )
+from app.models.collaboration import (
+    CommentThread,
+    Comment,
+    Favorite,
+    Collection,
+    CollectionItem,
+    ActivityEvent,
+    Mention,
+    SearchHistory
+)
 
 __all__ = [
     "Base",
@@ -51,5 +61,13 @@ __all__ = [
     "TrademarkCheck",
     "SocialHandleCheck",
     "Export",
-    "GenerationJob"
+    "GenerationJob",
+    "CommentThread",
+    "Comment",
+    "Favorite",
+    "Collection",
+    "CollectionItem",
+    "ActivityEvent",
+    "Mention",
+    "SearchHistory"
 ]

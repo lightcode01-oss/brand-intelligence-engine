@@ -12,6 +12,10 @@ from app.api.v1.feature_flags import router as feature_flags_router
 from app.api.v1.metrics import router as metrics_router
 from app.api.v1.billing import router as billing_router
 from app.api.v1.webhooks import router as webhooks_router
+from app.api.v1.collaboration import router as collaboration_router
+from app.api.v1.notifications import router as notifications_router
+from app.api.v1.search import router as search_router
+from app.api.v1.activity import router as activity_router
 
 router = APIRouter()
 router.include_router(health_router)
@@ -27,3 +31,7 @@ router.include_router(feature_flags_router)
 router.include_router(metrics_router)
 router.include_router(billing_router)
 router.include_router(webhooks_router)
+router.include_router(collaboration_router)
+router.include_router(notifications_router)
+router.include_router(search_router)
+router.include_router(activity_router)

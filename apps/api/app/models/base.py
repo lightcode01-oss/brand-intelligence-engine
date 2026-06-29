@@ -2,8 +2,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import DateTime, Integer, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.ext.compiler import compiles
+
+@compiles(JSONB, "sqlite")
+def compile_jsonb_sqlite(element, compiler, **kw):
+    return "JSON"
 
 class Base(DeclarativeBase):
     """ Declarative Base for database mapping."""
