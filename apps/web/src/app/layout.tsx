@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import ThemeProvider from '@/components/providers/ThemeProvider';
+import QueryProvider from '@/components/providers/QueryProvider';
 
 export const metadata: Metadata = {
   title: 'Nomen - Brand Intelligence Platform',
@@ -13,7 +15,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="antialiased">
+        <QueryProvider>
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
+        </QueryProvider>
+      </body>
     </html>
   );
 }
