@@ -4,28 +4,7 @@ import os
 import sys
 from unittest.mock import MagicMock
 
-# Mock database modules before imports
-for m in [
-    'sqlalchemy',
-    'sqlalchemy.ext',
-    'sqlalchemy.ext.asyncio',
-    'sqlalchemy.orm',
-    'sqlalchemy.future',
-    'sqlalchemy.sql',
-    'sqlalchemy.dialects',
-    'sqlalchemy.dialects.postgresql',
-    'sqlalchemy.sql.functions'
-]:
-    sys.modules[m] = MagicMock()
 
-# Mock models base class attributes
-class MockBase:
-    metadata = MagicMock()
-
-sys.modules['app.models.base'] = MagicMock()
-sys.modules['app.models.base'].Base = MockBase
-sys.modules['app.models.base'].StandardBase = MockBase
-sys.modules['app.models.base'].ImmutableBase = MockBase
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

@@ -57,12 +57,17 @@ async def test_optimistic_locking_collision(db_session: AsyncSession) -> None:
     original_version = ws.version_id
     assert original_version == 1
     
-    # 2. Simulate concurrent updates using two separate database sessions/contexts
-    ws.display_name = "First Update Winner"
-    await db_session.commit() # Version increments to 2
+    # 2. Simulate concurrent updates using direct SQL update on the connection
+    from sqlalchemy import update
+    conn = await db_session.connection()
+    await conn.execute(
+        update(Workspace)
+        .where(Workspace.id == ws.id)
+        .values(display_name="First Update Winner", version_id=2)
+    )
     
-    # Create stale update attempt
-    ws.version_id = original_version # Force version back to stale state
+    # ws in our db_session still has version_id=1 in its internal state.
+    # Attempting to modify and commit it will result in StaleDataError.
     ws.display_name = "Stale Update Loser"
     
     with pytest.raises(StaleDataError):

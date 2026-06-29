@@ -8,12 +8,12 @@ from app.models.user import (
 )
 from app.models.workspace import Workspace, WorkspaceMember, Project
 from app.models.brand import (
-    GeneratedName, 
-    BrandScore, 
-    LogoSuggestion, 
-    DomainCheck, 
-    TrademarkCheck, 
-    SocialHandleCheck, 
+    GeneratedName,
+    BrandScore,
+    LogoSuggestion,
+    DomainCheck,
+    TrademarkCheck,
+    SocialHandleCheck,
     Export,
     GenerationJob
 )
@@ -28,6 +28,17 @@ from app.models.collaboration import (
     SearchHistory
 )
 from app.models.report import SavedReport
+from app.models.security import (
+    UserSession,
+    MFADevice,
+    RecoveryCode,
+    SecurityEvent,
+    SecurityPolicy,
+    SSOProvider,
+    DataExportRequest,
+    DataDeletionRequest,
+    ConsentRecord,
+)
 
 __all__ = [
     "Base",
@@ -71,5 +82,14 @@ __all__ = [
     "ActivityEvent",
     "Mention",
     "SearchHistory",
-    "SavedReport"
+    "SavedReport",
+    "UserSession",
+    "MFADevice",
+    "RecoveryCode",
+    "SecurityEvent",
+    "SecurityPolicy",
+    "SSOProvider",
+    "DataExportRequest",
+    "DataDeletionRequest",
+    "ConsentRecord",
 ]

@@ -21,6 +21,7 @@ from app.api.v1.insights import router as insights_router
 from app.api.v1.recommendations import router as recommendations_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.admin import router as admin_router
+from app.api.v1.security import router as security_router
 
 router = APIRouter()
 router.include_router(health_router)
@@ -45,3 +46,4 @@ router.include_router(insights_router)
 router.include_router(recommendations_router)
 router.include_router(reports_router)
 router.include_router(admin_router)
+router.include_router(security_router)

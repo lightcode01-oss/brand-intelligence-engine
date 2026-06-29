@@ -4,6 +4,7 @@ from typing import AsyncGenerator
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from app.models.base import Base
+import app.models  # Ensure all models are registered on Base.metadata
 
 # Detect database configuration, fallback to SQLite in-memory for zero-dependency tests
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
@@ -35,8 +36,10 @@ async def prepare_database(request) -> AsyncGenerator[None, None]:
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-        except Exception:
-            pass  # Skip if DB not available (pure unit test environment)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
     yield
     if not all_mock:
         try:
