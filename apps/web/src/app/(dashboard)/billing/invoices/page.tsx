@@ -4,7 +4,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Receipt, Download, ExternalLink, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Receipt, CheckCircle, Clock, XCircle } from 'lucide-react';
 
 interface Invoice {
   id: string;

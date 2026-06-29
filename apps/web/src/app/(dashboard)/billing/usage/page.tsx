@@ -3,8 +3,8 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api/client';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { BarChart3, Zap, Download, Globe, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/Card';
+import { Zap, Download, Globe, AlertTriangle } from 'lucide-react';
 
 interface ActionUsage {
   used: number;
