@@ -10,6 +10,8 @@ from app.api.v1.trademarks import router as trademarks_router
 from app.api.v1.exports import router as exports_router
 from app.api.v1.feature_flags import router as feature_flags_router
 from app.api.v1.metrics import router as metrics_router
+from app.api.v1.billing import router as billing_router
+from app.api.v1.webhooks import router as webhooks_router
 
 router = APIRouter()
 router.include_router(health_router)
@@ -23,3 +25,5 @@ router.include_router(trademarks_router)
 router.include_router(exports_router)
 router.include_router(feature_flags_router)
 router.include_router(metrics_router)
+router.include_router(billing_router)
+router.include_router(webhooks_router)

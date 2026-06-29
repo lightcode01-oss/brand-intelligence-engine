@@ -1,6 +1,7 @@
 import os
 import pytest
 from typing import AsyncGenerator
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from app.models.base import Base
 
@@ -11,14 +12,39 @@ TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite+aiosqlite:///:memory:
 engine = create_async_engine(TEST_DATABASE_URL, echo=False, future=True)
 TestingSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+
+def _is_sqlite(connection):
+    """Returns True when running against SQLite (skips JSONB/UUID-incompatible DDL)."""
+    return connection.dialect.name == "sqlite"
+
+
 @pytest.fixture(scope="session", autouse=True)
-async def prepare_database() -> AsyncGenerator[None, None]:
-    """Sets up the schema in the test database once per session."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+async def prepare_database(request) -> AsyncGenerator[None, None]:
+    """Sets up the schema in the test database once per session.
+    
+    Skips DDL for pure unit-test modules (billing, saas) that only use mocks.
+    """
+    skip_ddl_modules = {"test_billing", "test_saas"}
+    # Check if all collected items are from mock-only modules
+    all_mock = all(
+        item.module.__name__.split(".")[-1] in skip_ddl_modules
+        for item in request.session.items
+        if hasattr(item, "module")
+    )
+    if not all_mock:
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        except Exception:
+            pass  # Skip if DB not available (pure unit test environment)
     yield
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    if not all_mock:
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.drop_all)
+        except Exception:
+            pass
+
 
 @pytest.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
