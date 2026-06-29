@@ -2,7 +2,9 @@ from app.models.base import Base, StandardBase, ImmutableBase
 from app.models.user import (
     User, Subscription, AuditLog, FeatureFlag,
     Permission, Role, WorkspaceRole, Session,
-    RefreshToken, VerificationToken, PasswordResetToken
+    RefreshToken, VerificationToken, PasswordResetToken,
+    Plan, Invoice, CreditTransaction, UsageRecord,
+    APIKey, Notification, Coupon, WebhookEvent
 )
 from app.models.workspace import Workspace, WorkspaceMember, Project
 from app.models.brand import (
@@ -31,6 +33,14 @@ __all__ = [
     "RefreshToken",
     "VerificationToken",
     "PasswordResetToken",
+    "Plan",
+    "Invoice",
+    "CreditTransaction",
+    "UsageRecord",
+    "APIKey",
+    "Notification",
+    "Coupon",
+    "WebhookEvent",
     "Workspace",
     "WorkspaceMember",
     "Project",
