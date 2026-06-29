@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nomen-config
+  namespace: default
+data:
+  ENV: "production"
+  DATABASE_HOST: "nomen-postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_DB: "nomen_db"
+  REDIS_URL: "redis://nomen-redis:6379/0"
+  NEXT_PUBLIC_API_URL: "https://nomen.ai/api/v1"
+  DOMAIN_PROVIDER: "mock"
+  TRADEMARK_PROVIDER: "mock"

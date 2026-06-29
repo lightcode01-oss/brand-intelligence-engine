@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nomen-postgres
+  namespace: default
+spec:
+  serviceName: nomen-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nomen-postgres
+  template:
+    metadata:
+      labels:
+        app: nomen-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: ankane/pgvector:v0.5.1
+          ports:
+            - containerPort: 5432
+              name: dbport
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nomen-secrets
+                  key: DATABASE_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nomen-secrets
+                  key: DATABASE_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: nomen-config
+                  key: DATABASE_DB
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomen-postgres
+  namespace: default
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: nomen-postgres
+  clusterIP: None

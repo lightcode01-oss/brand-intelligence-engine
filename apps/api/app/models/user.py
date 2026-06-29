@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import String, Enum, ForeignKey, Boolean, Integer, DateTime, Table, Column
+from sqlalchemy import String, Enum, ForeignKey, Boolean, Integer, DateTime, Table, Column, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, StandardBase, ImmutableBase
@@ -141,4 +141,3 @@ class FeatureFlag(StandardBase):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-from sqlalchemy import func

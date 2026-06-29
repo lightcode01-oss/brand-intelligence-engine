@@ -10,6 +10,7 @@ from app.core.docs import setup_docs_overrides
 from app.middleware.request_id import RequestIDMiddleware
 from app.middleware.timing import TimingMiddleware
 from app.middleware.security import SecurityHeadersMiddleware, MaintenanceModeMiddleware
+from app.middleware.rate_limit import RedisRateLimiterMiddleware
 from app.exceptions.handlers import register_exception_handlers
 
 # Versioned router namespaces
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=1000)
     
     # Register custom pipeline middlewares
+    app.add_middleware(RedisRateLimiterMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(MaintenanceModeMiddleware)
     app.add_middleware(TimingMiddleware)

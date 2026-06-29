@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nomen-celery-worker
+  namespace: default
+  labels:
+    app: nomen-celery-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nomen-celery-worker
+  template:
+    metadata:
+      labels:
+        app: nomen-celery-worker
+    spec:
+      containers:
+        - name: celery-worker
+          image: lightcode01/nomen-api:latest
+          command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          env:
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://$(DB_USER):$(DB_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_DB)"
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: nomen-config
+                  key: REDIS_URL
+            - name: DATABASE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: nomen-config
+                  key: DATABASE_HOST
+            - name: DATABASE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: nomen-config
+                  key: DATABASE_PORT
+            - name: DATABASE_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: nomen-config
+                  key: DATABASE_DB
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: nomen-secrets
+                  key: DATABASE_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nomen-secrets
+                  key: DATABASE_PASSWORD
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nomen-secrets
+                  key: GEMINI_API_KEY

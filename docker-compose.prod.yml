@@ -1,0 +1,176 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: nomen_traefik_prod
+    restart: always
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.letsencrypt.acme.email=admin@nomen.ai"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+    networks:
+      - internal-net
+
+  web:
+    build:
+      context: .
+      dockerfile: ./docker/web/Dockerfile
+    container_name: nomen_web_prod
+    restart: always
+    environment:
+      - NEXT_PUBLIC_API_URL=https://nomen.ai/api/v1
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`nomen.ai`)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.tls.certresolver=letsencrypt"
+    networks:
+      - internal-net
+
+  api:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    container_name: nomen_api_prod
+    restart: always
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://nomen_user:${DB_PASSWORD}@postgres:5432/nomen_db
+      - REDIS_URL=redis://redis:6379/0
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`nomen.ai`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
+    networks:
+      - internal-net
+
+  postgres:
+    image: ankane/pgvector:v0.5.1
+    container_name: nomen_postgres_prod
+    restart: always
+    environment:
+      - POSTGRES_USER=nomen_user
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=nomen_db
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    networks:
+      - internal-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nomen_user -d nomen_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nomen_redis_prod
+    restart: always
+    volumes:
+      - redisdata_prod:/data
+    networks:
+      - internal-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    container_name: nomen_celery_worker_prod
+    restart: always
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://nomen_user:${DB_PASSWORD}@postgres:5432/nomen_db
+      - REDIS_URL=redis://redis:6379/0
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal-net
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    container_name: nomen_celery_beat_prod
+    restart: always
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://nomen_user:${DB_PASSWORD}@postgres:5432/nomen_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal-net
+
+  celery_flower:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    container_name: nomen_celery_flower_prod
+    restart: always
+    command: celery -A app.workers.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal-net
+
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: nomen_prometheus_prod
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - internal-net
+
+  grafana:
+    image: grafana/grafana:10.0.0
+    container_name: nomen_grafana_prod
+    restart: always
+    ports:
+      - "3001:3000"
+    networks:
+      - internal-net
+
+volumes:
+  pgdata_prod:
+  redisdata_prod:
+
+networks:
+  internal-net:
+    driver: bridge

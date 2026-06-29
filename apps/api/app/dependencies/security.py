@@ -51,6 +51,8 @@ async def get_current_user(user: Optional[User] = Depends(optional_user)) -> Use
         raise AuthenticationError("Authorization token is missing, invalid, or expired.")
     return user
 
+get_current_active_user = get_current_user
+
 def require_role(allowed_roles: list[str]) -> Callable:
     """Dependency factory checking that the authenticated user holds an authorized global role."""
     async def role_checker(current_user: User = Depends(get_current_user)) -> User:

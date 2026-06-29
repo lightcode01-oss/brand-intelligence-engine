@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nomen-redis
+  namespace: default
+  labels:
+    app: nomen-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nomen-redis
+  template:
+    metadata:
+      labels:
+        app: nomen-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 10
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nomen-redis
+  namespace: default
+spec:
+  ports:
+    - port: 6379
+  selector:
+    app: nomen-redis
+  type: ClusterIP

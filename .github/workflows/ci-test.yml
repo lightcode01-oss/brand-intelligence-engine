@@ -9,6 +9,31 @@ on:
 jobs:
   run-tests:
     runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: ankane/pgvector:v0.5.1
+        env:
+          POSTGRES_USER: nomen_user
+          POSTGRES_PASSWORD: supersecretpassword
+          POSTGRES_DB: nomen_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -44,12 +69,17 @@ jobs:
       - name: Install Python Dependencies
         run: |
           pip install -r apps/api/requirements.txt || echo "No requirements file yet"
-          pip install pytest
+          pip install pytest pytest-asyncio pytest-cov
 
-      - name: Run Backend Testing (Pytest Placeholder)
+      - name: Run Backend Testing
+        env:
+          DATABASE_URL: postgresql+asyncpg://nomen_user:supersecretpassword@localhost:5432/nomen_db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: testsecretkeyvalue
+          ENV: testing
         run: |
           if [ -d "apps/api/tests" ]; then
-            pytest apps/api/tests/
+            pytest apps/api/tests/ --cov=apps/api/app --cov-report=xml
           else
             echo "No api tests folder found"
           fi

@@ -71,6 +71,15 @@ services:
       timeout: 5s
       retries: 5
 
+  mailpit:
+    image: axllent/mailpit:v1.15
+    container_name: nomen_mailpit_dev
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - dev-net
+
 volumes:
   pgdata_dev:
 
