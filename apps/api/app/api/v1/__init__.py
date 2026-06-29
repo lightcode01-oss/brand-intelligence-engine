@@ -16,6 +16,11 @@ from app.api.v1.collaboration import router as collaboration_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.search import router as search_router
 from app.api.v1.activity import router as activity_router
+from app.api.v1.analytics import router as analytics_router
+from app.api.v1.insights import router as insights_router
+from app.api.v1.recommendations import router as recommendations_router
+from app.api.v1.reports import router as reports_router
+from app.api.v1.admin import router as admin_router
 
 router = APIRouter()
 router.include_router(health_router)
@@ -35,3 +40,8 @@ router.include_router(collaboration_router)
 router.include_router(notifications_router)
 router.include_router(search_router)
 router.include_router(activity_router)
+router.include_router(analytics_router)
+router.include_router(insights_router)
+router.include_router(recommendations_router)
+router.include_router(reports_router)
+router.include_router(admin_router)

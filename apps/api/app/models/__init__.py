@@ -27,6 +27,7 @@ from app.models.collaboration import (
     Mention,
     SearchHistory
 )
+from app.models.report import SavedReport
 
 __all__ = [
     "Base",
@@ -69,5 +70,6 @@ __all__ = [
     "CollectionItem",
     "ActivityEvent",
     "Mention",
-    "SearchHistory"
+    "SearchHistory",
+    "SavedReport"
 ]
